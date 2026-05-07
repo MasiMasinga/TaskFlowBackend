@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.Models;
 
 namespace TaskFlow.Controllers;
 
@@ -12,15 +13,15 @@ public class HealthController : ControllerBase
     {
         _environment = environment;
     }
- 
+        
     [HttpGet]
     public IActionResult Get()
     {
-        return Ok(new
+        return Ok(new HealthResponse
         {
-            status = "Healthy",
-            timestamp = DateTime.UtcNow,
-            service = "TaskFlow.Api"
+            Status = "Healthy",
+            Timestamp = DateTime.UtcNow,
+            Service = "TaskFlow.Api",
         });
     }
 

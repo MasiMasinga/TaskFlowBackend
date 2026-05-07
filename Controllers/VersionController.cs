@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.Models;
+using Microsoft.Extensions.Options;
 
 namespace TaskFlow.Controllers;
 
@@ -6,11 +8,11 @@ namespace TaskFlow.Controllers;
 [Route("api/[controller]")]
 public class VersionController : ControllerBase
 {
-    private readonly IConfiguration _configuration;
+    private readonly IOptions<ApiSettings> _apiSettings;
 
-    public VersionController(IConfiguration configuration)
+    public VersionController(IOptions<ApiSettings> apiSettings)
     {
-        _configuration = configuration;
+        _apiSettings = apiSettings;
     }
 
     [HttpGet]
@@ -18,7 +20,7 @@ public class VersionController : ControllerBase
     {
         return Ok(new
         {
-            Version = _configuration["ApiSettings:Version"]
+            Version = _apiSettings.Value.Version
         });
     }
 }
