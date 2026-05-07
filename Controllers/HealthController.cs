@@ -30,11 +30,11 @@ public class HealthController : ControllerBase
     {
         DateTime startTime = System.Diagnostics.Process.GetCurrentProcess().StartTime;
         
-        return Ok(new
+        return Ok(new HealthDetails
         {
             ProcessTime = DateTime.Now - startTime,
             MachineName = Environment.MachineName,
-            CurrentEnvironment = _environment.EnvironmentName,
+            CurrentEnvironment = _environment.IsDevelopment() ? "Development" : "Production",
         });
     }
 }
