@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.Interfaces;
 using TaskFlow.Models;
 
 namespace TaskFlow.Controllers;
@@ -7,34 +8,22 @@ namespace TaskFlow.Controllers;
 [Route("api/[controller]")]
 public class HealthController : ControllerBase
 {
-    private readonly IWebHostEnvironment _environment;
-
-    public HealthController(IWebHostEnvironment environment)
+    private readonly IHealthService _healthService;
+    
+    public HealthController(IHealthService healthService)
     {
-        _environment = environment;
+        _healthService = healthService;
     }
-        
+
     [HttpGet]
-    public IActionResult Get()
+    public IActionResult GetHealth()
     {
-        return Ok(new HealthResponse
-        {
-            Status = "Healthy",
-            Timestamp = DateTime.UtcNow,
-            Service = "TaskFlow.Api",
-        });
+        return Ok(_healthService.GetHealth());
     }
 
     [HttpGet("details")]
     public IActionResult GetHealthDetails()
     {
-        DateTime startTime = System.Diagnostics.Process.GetCurrentProcess().StartTime;
-        
-        return Ok(new HealthDetails
-        {
-            ProcessTime = DateTime.Now - startTime,
-            MachineName = Environment.MachineName,
-            CurrentEnvironment = _environment.IsDevelopment() ? "Development" : "Production",
-        });
+        return Ok(_healthService.GetHealthDetails());
     }
 }
