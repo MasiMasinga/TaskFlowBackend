@@ -1,7 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using TaskFlow.Interfaces;
-using TaskFlow.Models;
 
 namespace TaskFlow.Controllers;
 
