@@ -13,6 +13,7 @@ builder.Services.Configure<ApiSettings>(builder.Configuration.GetSection("ApiSet
 builder.Services.AddSingleton<ISystemInfoService, SystemInfoService>();
 builder.Services.AddSingleton<IHealthService, HealthService>();
 builder.Services.AddSingleton<IGreetingService, GreetingsService>();
+builder.Services.AddSingleton<IVersionService, VersionService>();
 builder.Services.AddSingleton<IClockService, ClockService>();
 
 var app = builder.Build();
