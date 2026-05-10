@@ -12,6 +12,8 @@ builder.Services.AddOpenApi();
 builder.Services.Configure<ApiSettings>(builder.Configuration.GetSection("ApiSettings"));
 builder.Services.AddSingleton<ISystemInfoService, SystemInfoService>();
 builder.Services.AddSingleton<IHealthService, HealthService>();
+builder.Services.AddSingleton<IGreetingService, GreetingsService>();
+builder.Services.AddSingleton<IClockService, ClockService>();
 
 var app = builder.Build();
 
