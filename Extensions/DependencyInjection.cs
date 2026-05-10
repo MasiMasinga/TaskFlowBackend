@@ -1,6 +1,7 @@
 using TaskFlow.Interfaces;
+using TaskFlow.Services;
 
-namespace TaskFlow.Services;
+namespace TaskFlow.Extensions;
 
 public static class DependencyInjection
 {
