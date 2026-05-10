@@ -10,11 +10,7 @@ builder.Services.AddOptions();
 builder.Services.AddControllers();
 builder.Services.AddOpenApi();
 builder.Services.Configure<ApiSettings>(builder.Configuration.GetSection("ApiSettings"));
-builder.Services.AddSingleton<ISystemInfoService, SystemInfoService>();
-builder.Services.AddSingleton<IHealthService, HealthService>();
-builder.Services.AddSingleton<IGreetingService, GreetingsService>();
-builder.Services.AddSingleton<IVersionService, VersionService>();
-builder.Services.AddSingleton<IClockService, ClockService>();
+builder.Services.AddApplicationServices();
 
 var app = builder.Build();
 
