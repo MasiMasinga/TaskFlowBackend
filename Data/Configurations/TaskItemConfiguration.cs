@@ -19,6 +19,10 @@ public class TaskItemConfiguration : IEntityTypeConfiguration<TaskItem>
             .HasConversion<string>()
             .HasMaxLength(20)
             .IsRequired();
+        builder.Property(t => t.Priority)
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .IsRequired();
         builder.Property(t => t.CreatedAtUtc)
             .IsRequired();
         builder.HasIndex(t => t.Status);
