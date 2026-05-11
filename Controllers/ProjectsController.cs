@@ -40,4 +40,15 @@ public class ProjectsController : ControllerBase
         var response = project.ToResponse();
         return CreatedAtAction(nameof(GetById), new { id = project.Id }, response);
     }
+
+    [HttpPut("{id:guid}")]
+    public async Task<ActionResult<ProjectResponse>> Update(
+        Guid id,
+        [FromBody] UpdateProjectRequest request,
+        CancellationToken ct)
+    {
+        var project = await _projects.UpdateAsync(id, request.Name, request.Description, ct);
+        var response = project.ToResponse();
+        return Ok(response);
+    }
 }

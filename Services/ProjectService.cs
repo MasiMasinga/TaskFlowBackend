@@ -46,4 +46,17 @@ public class ProjectService : IProjectService
         await _db.SaveChangesAsync(ct);
         return project;
     }
+
+    public async Task<Project> UpdateAsync(Guid id, string name, string? description, CancellationToken ct)
+    {
+        var project = await _db.Projects.FindAsync(id, ct);
+
+        if (project is null)
+            throw new InvalidOperationException("Project not found");
+
+        project.Name = name;
+        project.Description = description;
+        await _db.SaveChangesAsync(ct);
+        return project;
+    }
 }

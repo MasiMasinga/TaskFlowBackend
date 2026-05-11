@@ -15,8 +15,7 @@ public class CreateTaskRequestValidator : AbstractValidator<CreateTaskRequest>
             .MaximumLength(4000);
 
         RuleFor(x => x.DueDateUtc)
-            .GreaterThan(DateTime.UtcNow)
-            .When(x => x.DueDateUtc.HasValue)
-            .WithMessage("Due date must be in the future.");
+            .Must(due => !due.HasValue || due.Value >= DateTime.UtcNow.AddYears(-50))
+            .WithMessage("Due date, if provided, must not be more than 50 years in the past.");
     }
 }
