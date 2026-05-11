@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using TaskFlow.DTOs.Projects;
 using TaskFlow.Interfaces;
+using TaskFlow.Mappings;
 
 namespace TaskFlow.Controllers;
 
@@ -15,25 +17,27 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
+    public async Task<ActionResult<IReadOnlyList<ProjectResponse>>> GetAll(CancellationToken ct)
     {
         var projects = await _projects.GetAllAsync(ct);
-        return Ok(projects);
+        var response = projects.Select(p => p.ToResponse()).ToList();
+        return Ok(response);
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
+    public async Task<ActionResult<ProjectDetailResponse>> GetById(Guid id, CancellationToken ct)
     {
         var project = await _projects.GetByIdAsync(id, ct);
-        return project is null ? NotFound() : Ok(project);
+        return project is null ? NotFound() : Ok(project.ToDetailResponse());
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateProjectRequest request, CancellationToken ct)
+    public async Task<ActionResult<ProjectResponse>> Create(
+        [FromBody] CreateProjectRequest request,
+        CancellationToken ct)
     {
         var project = await _projects.CreateAsync(request.Name, request.Description, ct);
-        return CreatedAtAction(nameof(GetById), new { id = project.Id }, project);
+        var response = project.ToResponse();
+        return CreatedAtAction(nameof(GetById), new { id = project.Id }, response);
     }
 }
-
-public record CreateProjectRequest(string Name, string? Description);
