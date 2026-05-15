@@ -17,10 +17,11 @@ public class TaskService : ITaskService
         _clockService = clockService;
     }
 
-    public async Task<List<TaskItem>> GetAllAsync(CancellationToken ct)
+    public async Task<List<TaskItem>> GetAllForProjectAsync(Guid projectId, CancellationToken ct)
     {
         return await _db.Tasks
             .AsNoTracking()
+            .Where(t => t.ProjectId == projectId)
             .OrderByDescending(t => t.CreatedAtUtc)
             .ToListAsync(ct);
     }
@@ -29,12 +30,14 @@ public class TaskService : ITaskService
     {
         return await _db.Tasks
             .AsNoTracking()
-            .Include(t => t.Project)
             .FirstOrDefaultAsync(t => t.Id == id, ct);
     }
 
-    public async Task<TaskItem> CreateAsync(string title, string? description, DateTime? dueDateUtc, Priority priority, Guid projectId, CancellationToken ct)
+    public async Task<TaskItem> CreateAsync(Guid projectId, string title, string? description, DateTime? dueDateUtc, CancellationToken ct)
     {
+        var projectExists = await _db.Projects.AnyAsync(p => p.Id == projectId, ct);
+        if (!projectExists) throw new InvalidOperationException("Project not found");
+
         var task = new TaskItem
         {
             Id = Guid.NewGuid(),
@@ -42,17 +45,36 @@ public class TaskService : ITaskService
             Description = description,
             DueDateUtc = dueDateUtc,
             Status = TaskItemStatus.Open,
-            Priority = priority,
             CreatedAtUtc = _clockService.GetClock().UtcNow,
             ProjectId = projectId,
         };
 
-        if (projectId == Guid.Empty)
-            throw new InvalidOperationException("Project ID is required");
-
         _db.Tasks.Add(task);
-
         await _db.SaveChangesAsync(ct);
         return task;
+    }
+
+    public async Task<bool> UpdateAsync(Guid id, string title, string? description, TaskItemStatus status, DateTime? dueDateUtc, CancellationToken ct)
+    {
+        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (task is null) return false;
+
+        task.Title = title;
+        task.Description = description;
+        task.Status = status;
+        task.DueDateUtc = dueDateUtc;
+
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct)
+    {
+        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (task is null) return false;
+
+        _db.Tasks.Remove(task);
+        await _db.SaveChangesAsync(ct);
+        return true;
     }
 }

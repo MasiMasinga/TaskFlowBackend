@@ -1,6 +1,5 @@
 using TaskFlow.Interfaces;
 using TaskFlow.Services;
-using TaskFlow.Api.Services;
 
 namespace TaskFlow.Extensions;
 
@@ -14,6 +13,7 @@ public static class DependencyInjection
         services.AddSingleton<ISystemInfoService, SystemInfoService>();
         services.AddSingleton<IVersionService, VersionService>();
         services.AddScoped<IProjectService, ProjectService>();
+        services.AddScoped<ITaskService, TaskService>();
         return services;
     }
 }

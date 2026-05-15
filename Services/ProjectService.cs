@@ -3,7 +3,7 @@ using TaskFlow.Data;
 using TaskFlow.Interfaces;
 using TaskFlow.Models;
 
-namespace TaskFlow.Api.Services;
+namespace TaskFlow.Services;
 
 public class ProjectService : IProjectService
 {
@@ -56,7 +56,19 @@ public class ProjectService : IProjectService
 
         project.Name = name;
         project.Description = description;
+
         await _db.SaveChangesAsync(ct);
         return project;
+    }
+
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct)
+    {
+        var project = await _db.Projects.FindAsync(id, ct);
+
+        if (project is null) return false;
+
+        _db.Projects.Remove(project);
+        await _db.SaveChangesAsync(ct);
+        return true;
     }
 }

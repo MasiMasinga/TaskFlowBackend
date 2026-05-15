@@ -16,15 +16,17 @@ public class ProjectsController : ControllerBase
         _projects = projects;
     }
 
-    [HttpGet]
+     [HttpGet]
+    [ProducesResponseType(typeof(IReadOnlyList<ProjectResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ProjectResponse>>> GetAll(CancellationToken ct)
     {
         var projects = await _projects.GetAllAsync(ct);
-        var response = projects.Select(p => p.ToResponse()).ToList();
-        return Ok(response);
+        return Ok(projects.Select(p => p.ToResponse()).ToList());
     }
 
     [HttpGet("{id:guid}")]
+    [ProducesResponseType(typeof(ProjectDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ProjectDetailResponse>> GetById(Guid id, CancellationToken ct)
     {
         var project = await _projects.GetByIdAsync(id, ct);
@@ -32,6 +34,8 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpPost]
+    [ProducesResponseType(typeof(ProjectResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<ProjectResponse>> Create(
         [FromBody] CreateProjectRequest request,
         CancellationToken ct)
@@ -42,13 +46,24 @@ public class ProjectsController : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<ActionResult<ProjectResponse>> Update(
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Update(
         Guid id,
         [FromBody] UpdateProjectRequest request,
         CancellationToken ct)
     {
         var project = await _projects.UpdateAsync(id, request.Name, request.Description, ct);
-        var response = project.ToResponse();
-        return Ok(response);
+        return project is null ? NotFound() : NoContent();
+    }
+
+    [HttpDelete("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        var found = await _projects.DeleteAsync(id, ct);
+        return found ? NoContent() : NotFound();
     }
 }

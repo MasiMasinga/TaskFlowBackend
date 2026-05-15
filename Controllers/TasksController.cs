@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
-using TaskFlow.Enum;
+using TaskFlow.DTOs.Tasks;
 using TaskFlow.Interfaces;
+using TaskFlow.Mappings;
 
 namespace TaskFlow.Controllers;
 
@@ -15,26 +16,73 @@ public class TasksController : ControllerBase
         _tasks = tasks;
     }
 
-    [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken ct)
+    [HttpGet("/projects/{projectId:guid}/tasks")]
+    [ProducesResponseType(typeof(IReadOnlyList<TaskResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IReadOnlyList<TaskResponse>>> GetAllForProject(
+        Guid projectId,
+        CancellationToken ct)
     {
-        var tasks = await _tasks.GetAllAsync(ct);
-        return Ok(tasks);
+        var tasks = await _tasks.GetAllForProjectAsync(projectId, ct);
+        var response = tasks.Select(t => t.ToResponse()).ToList();
+        return Ok(response);
     }
 
-    [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
+    [HttpGet("/tasks/{id:guid}", Name = nameof(GetTaskById))]
+    [ProducesResponseType(typeof(TaskResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TaskResponse>> GetTaskById(Guid id, CancellationToken ct)
     {
         var task = await _tasks.GetByIdAsync(id, ct);
-        return task is null ? NotFound() : Ok(task);
+        return task is null ? NotFound() : Ok(task.ToResponse());
     }
 
-    [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateTaskRequest request, CancellationToken ct)
+    [HttpPost("/projects/{projectId:guid}/tasks")]
+    [ProducesResponseType(typeof(TaskResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TaskResponse>> Create(
+        Guid projectId,
+        [FromBody] CreateTaskRequest request,
+        CancellationToken ct)
     {
-        var task = await _tasks.CreateAsync(request.Title, request.Description, request.DueDateUtc, request.Priority, request.ProjectId, ct);
-        return CreatedAtAction(nameof(GetById), new { id = task.Id }, task);
+        var task = await _tasks.CreateAsync(
+            projectId, request.Title, request.Description, request.DueDateUtc, ct);
+
+        if (task is null)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Status = StatusCodes.Status404NotFound,
+                Title = "Project not found",
+                Detail = $"No project exists with id {projectId}."
+            });
+        }
+
+        var response = task.ToResponse();
+        return CreatedAtRoute(nameof(GetTaskById), new { id = task.Id }, response);
+    }
+
+    [HttpPut("/tasks/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Update(
+        Guid id,
+        [FromBody] UpdateTaskRequest request,
+        CancellationToken ct)
+    {
+        var found = await _tasks.UpdateAsync(
+            id, request.Title, request.Description, request.Status, request.DueDateUtc, ct);
+
+        return found ? NoContent() : NotFound();
+    }
+
+    [HttpDelete("/tasks/{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    {
+        var found = await _tasks.DeleteAsync(id, ct);
+        return found ? NoContent() : NotFound();
     }
 }
-
-public record CreateTaskRequest(string Title, string? Description, DateTime? DueDateUtc, Priority Priority, Guid ProjectId);
