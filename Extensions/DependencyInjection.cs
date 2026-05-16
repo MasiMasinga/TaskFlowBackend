@@ -1,3 +1,4 @@
+using StackExchange.Redis;
 using TaskFlow.Interfaces;
 using TaskFlow.Services;
 using TaskFlow.Services.Caching;
@@ -23,12 +24,17 @@ public static class DependencyInjection
         services.AddScoped<ICurrentUser, CurrentUser>();
         services.AddMemoryCache();
         // services.AddSingleton<ICacheService, MemoryCacheService>();
+        var redisConnection = configuration.GetConnectionString("Redis")
+            ?? throw new InvalidOperationException("Connection string 'Redis' is not configured.");
+
         services.AddStackExchangeRedisCache(options =>
         {
-            options.Configuration = configuration.GetConnectionString("Redis");
-            options.InstanceName = "taskflow:";
+            options.Configuration = redisConnection;
+            options.InstanceName = CacheKeys.InstanceName;
         });
+        services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConnection));
         services.AddSingleton<ICacheService, RedisCacheService>();
+        services.AddSingleton<IAdminCacheService, RedisAdminCacheService>();
         return services;
     }
 }
