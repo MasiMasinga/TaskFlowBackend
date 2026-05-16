@@ -10,6 +10,7 @@ using Microsoft.OpenApi;
 using TaskFlow.Data;
 using TaskFlow.Data.Configurations;
 using TaskFlow.Extensions;
+using TaskFlow.Middleware;
 using TaskFlow.Models;
 
 
@@ -102,6 +103,7 @@ app.UseStatusCodePages();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseMiddleware<AuthForbiddenLoggingMiddleware>();
 app.MapControllers();
 
 await SeedAdminRoleAndUserAsync(app);

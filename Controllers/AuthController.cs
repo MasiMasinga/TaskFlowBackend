@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using TaskFlow.DTOs.Auth;
+using TaskFlow.Extensions;
 using TaskFlow.Interfaces;
 using TaskFlow.Models;
 
@@ -13,15 +14,18 @@ public class AuthController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly IRefreshTokenService _refreshTokenService;
     private readonly IClockService _clockService;
+    private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         UserManager<ApplicationUser> userManager,
         IRefreshTokenService refreshTokenService,
-        IClockService clockService)
+        IClockService clockService,
+        ILogger<AuthController> logger)
     {
         _userManager = userManager;
         _refreshTokenService = refreshTokenService;
         _clockService = clockService;
+        _logger = logger;
     }
 
     [HttpPost("register")]
@@ -29,9 +33,15 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest request, CancellationToken ct)
     {
+        var clientIp = HttpContext.GetClientIpAddress();
+
         var existing = await _userManager.FindByEmailAsync(request.Email);
         if (existing is not null)
         {
+            _logger.LogWarning(
+                "Registration failed: email already registered {Email} from {ClientIp}",
+                request.Email,
+                clientIp);
             return BadRequest(new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,
@@ -52,6 +62,11 @@ public class AuthController : ControllerBase
         var result = await _userManager.CreateAsync(user, request.Password);
         if (!result.Succeeded)
         {
+            _logger.LogWarning(
+                "Registration failed for {Email} from {ClientIp}: {Errors}",
+                request.Email,
+                clientIp,
+                string.Join("; ", result.Errors.Select(e => e.Description)));
             return BadRequest(new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,
@@ -63,6 +78,12 @@ public class AuthController : ControllerBase
         var roles = await _userManager.GetRolesAsync(user);
         var tokens = await _refreshTokenService.IssueTokenPairAsync(user, roles, ct);
 
+        _logger.LogInformation(
+            "User registered {Email} {UserId} from {ClientIp}",
+            user.Email,
+            user.Id,
+            clientIp);
+
         return StatusCode(StatusCodes.Status201Created, ToAuthResponse(tokens));
     }
 
@@ -71,9 +92,15 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
+        var clientIp = HttpContext.GetClientIpAddress();
+
         var user = await _userManager.FindByEmailAsync(request.Email);
         if (user is null)
         {
+            _logger.LogWarning(
+                "Login failed for {Email} from {ClientIp}",
+                request.Email,
+                clientIp);
             return Unauthorized(new ProblemDetails
             {
                 Status = StatusCodes.Status401Unauthorized,
@@ -84,6 +111,10 @@ public class AuthController : ControllerBase
         var passwordOk = await _userManager.CheckPasswordAsync(user, request.Password);
         if (!passwordOk)
         {
+            _logger.LogWarning(
+                "Login failed for {Email} from {ClientIp}",
+                request.Email,
+                clientIp);
             return Unauthorized(new ProblemDetails
             {
                 Status = StatusCodes.Status401Unauthorized,
@@ -93,6 +124,13 @@ public class AuthController : ControllerBase
 
         var roles = await _userManager.GetRolesAsync(user);
         var tokens = await _refreshTokenService.IssueTokenPairAsync(user, roles, ct);
+
+        _logger.LogInformation(
+            "Login succeeded for {Email} {UserId} from {ClientIp}",
+            user.Email,
+            user.Id,
+            clientIp);
+
         return Ok(ToAuthResponse(tokens));
     }
 
