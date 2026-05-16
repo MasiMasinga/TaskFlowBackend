@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using TaskFlow.DTOs.Projects;
+using TaskFlow.Enum;
 using TaskFlow.Interfaces;
 using TaskFlow.Mappings;
-using TaskFlow.Enum;
 
 namespace TaskFlow.Controllers;
 
@@ -69,7 +69,7 @@ public class ProjectsController : ControllerBase
         [FromQuery(Name = "force")] bool force = false)
     {
         var result = await _projects.DeleteAsync(id, ct, force);
-        
+
         return result switch
         {
             ProjectDeleteResult.Deleted => NoContent(),
