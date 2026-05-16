@@ -93,4 +93,78 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+await SeedAdminRoleAndUserAsync(app);
+
 await app.RunAsync();
+
+static async Task SeedAdminRoleAndUserAsync(WebApplication app)
+{
+    const string adminRoleName = "Admin";
+
+    using var scope = app.Services.CreateScope();
+    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+    var config = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Seed");
+
+    if (!await roleManager.RoleExistsAsync(adminRoleName))
+    {
+        var roleResult = await roleManager.CreateAsync(new IdentityRole<Guid>
+        {
+            Id = Guid.NewGuid(),
+            Name = adminRoleName
+        });
+
+        if (!roleResult.Succeeded)
+        {
+            logger.LogError(
+                "Failed to create {Role} role: {Errors}",
+                adminRoleName,
+                string.Join("; ", roleResult.Errors.Select(e => e.Description)));
+            return;
+        }
+    }
+
+    var adminEmail = config["Seed:AdminEmail"];
+    var adminPassword = config["Seed:AdminPassword"];
+    if (string.IsNullOrWhiteSpace(adminEmail) || string.IsNullOrWhiteSpace(adminPassword))
+    {
+        logger.LogWarning("Seed admin skipped: Seed:AdminEmail or Seed:AdminPassword is not configured.");
+        return;
+    }
+
+    var adminUser = await userManager.FindByEmailAsync(adminEmail);
+    if (adminUser is null)
+    {
+        adminUser = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            UserName = adminEmail,
+            Email = adminEmail,
+            DisplayName = "Administrator",
+            CreatedAtUtc = DateTime.UtcNow
+        };
+
+        var createResult = await userManager.CreateAsync(adminUser, adminPassword);
+        if (!createResult.Succeeded)
+        {
+            logger.LogError(
+                "Failed to create seed admin user: {Errors}",
+                string.Join("; ", createResult.Errors.Select(e => e.Description)));
+            return;
+        }
+    }
+
+    if (!await userManager.IsInRoleAsync(adminUser, adminRoleName))
+    {
+        var assignResult = await userManager.AddToRoleAsync(adminUser, adminRoleName);
+        if (!assignResult.Succeeded)
+        {
+            logger.LogError(
+                "Failed to assign {Role} role to seed admin: {Errors}",
+                adminRoleName,
+                string.Join("; ", assignResult.Errors.Select(e => e.Description)));
+        }
+    }
+}

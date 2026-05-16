@@ -4,20 +4,23 @@ using TaskFlow.DTOs.Auth;
 using TaskFlow.Interfaces;
 using TaskFlow.Models;
 
-namespace TaskFlow.Api.Controllers;
+namespace TaskFlow.Controllers;
 
 [ApiController]
 [Route("api/auth")]
 public class AuthController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;
-    private readonly ITokenService _tokenService;
+    private readonly IRefreshTokenService _refreshTokenService;
     private readonly IClockService _clockService;
 
-    public AuthController(UserManager<ApplicationUser> userManager, ITokenService tokenService, IClockService clockService)
+    public AuthController(
+        UserManager<ApplicationUser> userManager,
+        IRefreshTokenService refreshTokenService,
+        IClockService clockService)
     {
         _userManager = userManager;
-        _tokenService = tokenService;
+        _refreshTokenService = refreshTokenService;
         _clockService = clockService;
     }
 
@@ -58,11 +61,9 @@ public class AuthController : ControllerBase
         }
 
         var roles = await _userManager.GetRolesAsync(user);
-        var token = _tokenService.CreateAccessToken(user, roles);
+        var tokens = await _refreshTokenService.IssueTokenPairAsync(user, roles, ct);
 
-        return StatusCode(
-            StatusCodes.Status201Created,
-            new AuthResponse(token.AccessToken, token.ExpiresAtUtc));
+        return StatusCode(StatusCodes.Status201Created, ToAuthResponse(tokens));
     }
 
     [HttpPost("login")]
@@ -91,7 +92,68 @@ public class AuthController : ControllerBase
         }
 
         var roles = await _userManager.GetRolesAsync(user);
-        var token = _tokenService.CreateAccessToken(user, roles);
-        return Ok(new AuthResponse(token.AccessToken, token.ExpiresAtUtc));
+        var tokens = await _refreshTokenService.IssueTokenPairAsync(user, roles, ct);
+        return Ok(ToAuthResponse(tokens));
     }
+
+    [HttpPost("refresh")]
+    [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<AuthResponse>> Refresh([FromBody] RefreshRequest request, CancellationToken ct)
+    {
+        var tokens = await _refreshTokenService.RotateAsync(request.RefreshToken, ct);
+        if (tokens is null)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Invalid refresh token"
+            });
+        }
+
+        return Ok(ToAuthResponse(tokens));
+    }
+
+    [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Logout([FromBody] LogoutRequest request, CancellationToken ct)
+    {
+        var revoked = await _refreshTokenService.RevokeAsync(request.RefreshToken, ct);
+        if (!revoked)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Logout failed",
+                Detail = "Refresh token is invalid or already revoked."
+            });
+        }
+
+        return NoContent();
+    }
+
+    [HttpGet("me")]
+    [ProducesResponseType(typeof(UserResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<UserResponse>> Me(CancellationToken ct)
+    {
+        var user = await _userManager.GetUserAsync(User);
+        if (user is null)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Unauthorized"
+            });
+        }
+        return Ok(new UserResponse(user.Id, user.Email, user.DisplayName, user.CreatedAtUtc));
+    }
+
+    private static AuthResponse ToAuthResponse(AuthTokenPair tokens) =>
+        new(
+            tokens.AccessToken,
+            tokens.AccessExpiresAtUtc,
+            tokens.RefreshToken,
+            tokens.RefreshExpiresAtUtc);
 }

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TaskFlow.DTOs.Tasks;
 using TaskFlow.Interfaces;
@@ -6,15 +7,19 @@ using TaskFlow.Mappings;
 namespace TaskFlow.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class TasksController : ControllerBase
 {
     private readonly ITaskService _tasks;
+    private readonly ICurrentUser _currentUser;
 
-    public TasksController(ITaskService tasks)
+    public TasksController(ITaskService tasks, ICurrentUser currentUser)
     {
         _tasks = tasks;
+        _currentUser = currentUser;
     }
+    private Guid UserId => _currentUser.UserId ?? throw new InvalidOperationException("Authenticated user has no ID claim.");
 
     [HttpGet("/projects/{projectId:guid}/tasks")]
     [ProducesResponseType(typeof(IReadOnlyList<TaskResponse>), StatusCodes.Status200OK)]
@@ -22,7 +27,7 @@ public class TasksController : ControllerBase
         Guid projectId,
         CancellationToken ct)
     {
-        var tasks = await _tasks.GetAllForProjectAsync(projectId, ct);
+        var tasks = await _tasks.GetAllForProjectAsync(projectId, UserId, ct);
         var response = tasks.Select(t => t.ToResponse()).ToList();
         return Ok(response);
     }
@@ -32,7 +37,7 @@ public class TasksController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TaskResponse>> GetTaskById(Guid id, CancellationToken ct)
     {
-        var task = await _tasks.GetByIdAsync(id, ct);
+        var task = await _tasks.GetByIdAsync(id, UserId, ct);
         return task is null ? NotFound() : Ok(task.ToResponse());
     }
 
@@ -46,7 +51,7 @@ public class TasksController : ControllerBase
         CancellationToken ct)
     {
         var task = await _tasks.CreateAsync(
-            projectId, request.Title, request.Description, request.DueDateUtc, ct);
+            projectId, UserId, request.Title, request.Description, request.DueDateUtc, ct);
 
         if (task is null)
         {
@@ -72,7 +77,7 @@ public class TasksController : ControllerBase
         CancellationToken ct)
     {
         var found = await _tasks.UpdateAsync(
-            id, request.Title, request.Description, request.Status, request.DueDateUtc, ct);
+            id, UserId, request.Title, request.Description, request.Status, request.DueDateUtc, ct);
 
         return found ? NoContent() : NotFound();
     }
@@ -82,7 +87,7 @@ public class TasksController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
-        var found = await _tasks.DeleteAsync(id, ct);
+        var found = await _tasks.DeleteAsync(id, UserId, ct);
         return found ? NoContent() : NotFound();
     }
 
@@ -92,7 +97,7 @@ public class TasksController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateTaskStatusRequest request, CancellationToken ct)
     {
-        var found = await _tasks.UpdateStatusAsync(id, request.Status, ct);
+        var found = await _tasks.UpdateStatusAsync(id, UserId, request.Status, ct);
         return found ? NoContent() : NotFound();
     }
 }

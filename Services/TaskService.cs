@@ -17,25 +17,25 @@ public class TaskService : ITaskService
         _clockService = clockService;
     }
 
-    public async Task<List<TaskItem>> GetAllForProjectAsync(Guid projectId, CancellationToken ct)
+    public async Task<List<TaskItem>> GetAllForProjectAsync(Guid projectId, Guid userId, CancellationToken ct)
     {
         return await _db.Tasks
             .AsNoTracking()
-            .Where(t => t.ProjectId == projectId)
+            .Where(t => t.ProjectId == projectId && t.Project.OwnerId == userId)
             .OrderByDescending(t => t.CreatedAtUtc)
             .ToListAsync(ct);
     }
 
-    public async Task<TaskItem?> GetByIdAsync(Guid id, CancellationToken ct)
+    public async Task<TaskItem?> GetByIdAsync(Guid id, Guid userId, CancellationToken ct)
     {
         return await _db.Tasks
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Id == id, ct);
+            .FirstOrDefaultAsync(t => t.Id == id && t.Project.OwnerId == userId, ct);
     }
 
-    public async Task<TaskItem> CreateAsync(Guid projectId, string title, string? description, DateTime? dueDateUtc, CancellationToken ct)
+    public async Task<TaskItem> CreateAsync(Guid projectId, Guid userId, string title, string? description, DateTime? dueDateUtc, CancellationToken ct)
     {
-        var projectExists = await _db.Projects.AnyAsync(p => p.Id == projectId, ct);
+        var projectExists = await _db.Projects.AnyAsync(p => p.Id == projectId && p.OwnerId == userId, ct);
         if (!projectExists) throw new InvalidOperationException("Project not found");
 
         var task = new TaskItem
@@ -46,7 +46,6 @@ public class TaskService : ITaskService
             DueDateUtc = dueDateUtc,
             Status = TaskItemStatus.Open,
             CreatedAtUtc = _clockService.GetClock().UtcNow,
-            ProjectId = projectId,
         };
 
         _db.Tasks.Add(task);
@@ -54,9 +53,9 @@ public class TaskService : ITaskService
         return task;
     }
 
-    public async Task<bool> UpdateAsync(Guid id, string title, string? description, TaskItemStatus status, DateTime? dueDateUtc, CancellationToken ct)
+    public async Task<bool> UpdateAsync(Guid id, Guid userId, string title, string? description, TaskItemStatus status, DateTime? dueDateUtc, CancellationToken ct)
     {
-        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == id, ct);
+        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.Project.OwnerId == userId, ct);
         if (task is null) return false;
 
         task.Title = title;
@@ -68,9 +67,9 @@ public class TaskService : ITaskService
         return true;
     }
 
-    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct)
+    public async Task<bool> DeleteAsync(Guid id, Guid userId, CancellationToken ct)
     {
-        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == id, ct);
+        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.Project.OwnerId == userId, ct);
         if (task is null) return false;
 
         _db.Tasks.Remove(task);
@@ -78,9 +77,9 @@ public class TaskService : ITaskService
         return true;
     }
 
-    public async Task<bool> UpdateStatusAsync(Guid id, TaskItemStatus status, CancellationToken ct)
+    public async Task<bool> UpdateStatusAsync(Guid id, Guid userId, TaskItemStatus status, CancellationToken ct)
     {
-        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == id, ct);
+        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == id && t.Project.OwnerId == userId, ct);
         if (task is null) return false;
 
         task.Status = status;
