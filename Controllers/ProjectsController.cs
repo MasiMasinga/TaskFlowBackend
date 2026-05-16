@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Mvc;
 using TaskFlow.DTOs.Projects;
 using TaskFlow.Enum;
 using TaskFlow.Interfaces;
-using TaskFlow.Mappings;
 
 namespace TaskFlow.Controllers;
 
@@ -27,7 +26,7 @@ public class ProjectsController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<ProjectResponse>>> GetAll(CancellationToken ct)
     {
         var projects = await _projects.GetAllAsync(UserId, ct);
-        return Ok(projects.Select(p => p.ToResponse()).ToList());
+        return Ok(projects);
     }
 
     [HttpGet("{id:guid}")]
@@ -36,7 +35,7 @@ public class ProjectsController : ControllerBase
     public async Task<ActionResult<ProjectDetailResponse>> GetById(Guid id, CancellationToken ct)
     {
         var project = await _projects.GetByIdAsync(id, UserId, ct);
-        return project is null ? NotFound() : Ok(project.ToDetailResponse());
+        return project is null ? NotFound() : Ok(project);
     }
 
     [HttpPost]
@@ -46,9 +45,8 @@ public class ProjectsController : ControllerBase
         [FromBody] CreateProjectRequest request,
         CancellationToken ct)
     {
-        var project = await _projects.CreateAsync(UserId, request.Name, request.Description, ct);
-        var response = project.ToResponse();
-        return CreatedAtAction(nameof(GetById), new { id = project.Id }, response);
+        var response = await _projects.CreateAsync(UserId, request.Name, request.Description, ct);
+        return CreatedAtAction(nameof(GetById), new { id = response.Id }, response);
     }
 
     [HttpPut("{id:guid}")]

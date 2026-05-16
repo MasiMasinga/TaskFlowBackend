@@ -1,7 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using TaskFlow.Data;
+using TaskFlow.DTOs.Projects;
 using TaskFlow.Enum;
 using TaskFlow.Interfaces;
+using TaskFlow.Mappings;
 using TaskFlow.Models;
 using TaskFlow.Services.Caching;
 
@@ -22,11 +24,15 @@ public class ProjectService : IProjectService
         _cache = cache;
     }
 
-    public async Task<List<Project>> GetAllAsync(Guid userId, CancellationToken ct)
+    // Mapping lives in this service (after load, before SetAsync), not in ICacheService or controllers.
+    // The cache stores the API contract (DTOs): hits skip EF and mapping, and we never serialize
+    // entity graphs or leak persistence shape across process boundaries.
+
+    public async Task<List<ProjectResponse>> GetAllAsync(Guid userId, CancellationToken ct)
     {
         var key = CacheKeys.ProjectsForUser(userId);
 
-        var cached = await _cache.GetAsync<List<Project>>(key, ct);
+        var cached = await _cache.GetAsync<List<ProjectResponse>>(key, ct);
         if (cached is not null) return cached;
 
         var projects = await _db.Projects
@@ -35,15 +41,16 @@ public class ProjectService : IProjectService
             .OrderByDescending(p => p.CreatedAtUtc)
             .ToListAsync(ct);
 
-        await _cache.SetAsync(key, projects, ProjectsCacheTtl, ct);
-        return projects;
+        var responses = projects.Select(p => p.ToResponse()).ToList();
+        await _cache.SetAsync(key, responses, ProjectsCacheTtl, ct);
+        return responses;
     }
 
-    public async Task<Project?> GetByIdAsync(Guid id, Guid userId, CancellationToken ct)
+    public async Task<ProjectDetailResponse?> GetByIdAsync(Guid id, Guid userId, CancellationToken ct)
     {
         var key = CacheKeys.ProjectDetail(id, userId);
 
-        var cached = await _cache.GetAsync<Project>(key, ct);
+        var cached = await _cache.GetAsync<ProjectDetailResponse>(key, ct);
         if (cached is not null) return cached;
 
         var project = await _db.Projects
@@ -51,13 +58,14 @@ public class ProjectService : IProjectService
             .Include(p => p.Tasks)
             .FirstOrDefaultAsync(p => p.Id == id && p.OwnerId == userId, ct);
 
-        if (project is not null)
-            await _cache.SetAsync(key, project, ProjectsCacheTtl, ct);
+        if (project is null) return null;
 
-        return project;
+        var response = project.ToDetailResponse();
+        await _cache.SetAsync(key, response, ProjectsCacheTtl, ct);
+        return response;
     }
 
-    public async Task<Project> CreateAsync(Guid userId, string name, string? description, CancellationToken ct)
+    public async Task<ProjectResponse> CreateAsync(Guid userId, string name, string? description, CancellationToken ct)
     {
         var project = new Project
         {
@@ -73,7 +81,7 @@ public class ProjectService : IProjectService
         await _db.SaveChangesAsync(ct);
         await _cache.RemoveAsync(CacheKeys.ProjectsForUser(userId), ct);
 
-        return project;
+        return project.ToResponse();
     }
 
     public async Task<Project> UpdateAsync(Guid id, Guid userId, string name, string? description, CancellationToken ct)
@@ -107,6 +115,10 @@ public class ProjectService : IProjectService
 
         _db.Projects.Remove(project);
         await _db.SaveChangesAsync(ct);
+
+        await _cache.RemoveAsync(CacheKeys.ProjectsForUser(userId), ct);
+        await _cache.RemoveAsync(CacheKeys.ProjectDetail(id, userId), ct);
+
         return ProjectDeleteResult.Deleted;
     }
 
