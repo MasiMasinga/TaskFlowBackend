@@ -4,6 +4,7 @@ using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using TaskFlow.Data;
@@ -88,6 +89,8 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+await ApplyMigrationsIfEnabledAsync(app);
+
 app.UseSwagger();
 app.UseSwaggerUI(options =>
 {
@@ -104,6 +107,16 @@ app.MapControllers();
 await SeedAdminRoleAndUserAsync(app);
 
 await app.RunAsync();
+
+static async Task ApplyMigrationsIfEnabledAsync(WebApplication app)
+{
+    if (!app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
+        return;
+
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+}
 
 static async Task SeedAdminRoleAndUserAsync(WebApplication app)
 {
