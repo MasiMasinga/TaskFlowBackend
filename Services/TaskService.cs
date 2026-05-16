@@ -3,34 +3,59 @@ using TaskFlow.Data;
 using TaskFlow.Enum;
 using TaskFlow.Interfaces;
 using TaskFlow.Models;
+using TaskFlow.Services.Caching;
 
 namespace TaskFlow.Services;
 
 public class TaskService : ITaskService
 {
+    private static readonly TimeSpan TasksCacheTtl = TimeSpan.FromMinutes(2);
+
     private readonly AppDbContext _db;
     private readonly IClockService _clockService;
+    private readonly ICacheService _cache;
 
-    public TaskService(AppDbContext db, IClockService clockService)
+    public TaskService(AppDbContext db, IClockService clockService, ICacheService cache)
     {
         _db = db;
         _clockService = clockService;
+        _cache = cache;
     }
 
     public async Task<List<TaskItem>> GetAllForProjectAsync(Guid projectId, Guid userId, CancellationToken ct)
     {
-        return await _db.Tasks
+
+        var key = CacheKeys.TasksForProject(projectId, userId);
+
+        var cached = await _cache.GetAsync<List<TaskItem>>(key, ct);
+        if (cached is not null) return cached;
+
+        var tasks = await _db.Tasks
             .AsNoTracking()
             .Where(t => t.ProjectId == projectId && t.Project.OwnerId == userId)
             .OrderByDescending(t => t.CreatedAtUtc)
             .ToListAsync(ct);
+
+        await _cache.SetAsync(key, tasks, TasksCacheTtl, ct);
+        return tasks;
     }
 
     public async Task<TaskItem?> GetByIdAsync(Guid id, Guid userId, CancellationToken ct)
     {
-        return await _db.Tasks
+
+        var key = CacheKeys.TaskDetail(id, userId);
+
+        var cached = await _cache.GetAsync<TaskItem>(key, ct);
+        if (cached is not null) return cached;
+
+        var task = await _db.Tasks
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == id && t.Project.OwnerId == userId, ct);
+
+        if (task is not null)
+            await _cache.SetAsync(key, task, TasksCacheTtl, ct);
+
+        return task;
     }
 
     public async Task<TaskItem> CreateAsync(Guid projectId, Guid userId, string title, string? description, DateTime? dueDateUtc, CancellationToken ct)
@@ -49,7 +74,10 @@ public class TaskService : ITaskService
         };
 
         _db.Tasks.Add(task);
+
         await _db.SaveChangesAsync(ct);
+        await _cache.RemoveAsync(CacheKeys.TasksForProject(projectId, userId), ct);
+
         return task;
     }
 
@@ -64,6 +92,8 @@ public class TaskService : ITaskService
         task.DueDateUtc = dueDateUtc;
 
         await _db.SaveChangesAsync(ct);
+        await _cache.RemoveAsync(CacheKeys.TaskDetail(id, userId), ct);
+        await _cache.RemoveAsync(CacheKeys.TasksForProject(task.ProjectId, userId), ct);   
         return true;
     }
 
@@ -74,6 +104,8 @@ public class TaskService : ITaskService
 
         _db.Tasks.Remove(task);
         await _db.SaveChangesAsync(ct);
+        await _cache.RemoveAsync(CacheKeys.TaskDetail(id, userId), ct);
+        await _cache.RemoveAsync(CacheKeys.TasksForProject(task.ProjectId, userId), ct);
         return true;
     }
 
@@ -84,6 +116,8 @@ public class TaskService : ITaskService
 
         task.Status = status;
         await _db.SaveChangesAsync(ct);
+        await _cache.RemoveAsync(CacheKeys.TaskDetail(id, userId), ct);
+        await _cache.RemoveAsync(CacheKeys.TasksForProject(task.ProjectId, userId), ct);
         return true;
     }
 }
