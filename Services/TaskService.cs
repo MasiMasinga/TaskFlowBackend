@@ -77,4 +77,14 @@ public class TaskService : ITaskService
         await _db.SaveChangesAsync(ct);
         return true;
     }
+
+    public async Task<bool> UpdateStatusAsync(Guid id, TaskItemStatus status, CancellationToken ct)
+    {
+        var task = await _db.Tasks.FirstOrDefaultAsync(t => t.Id == id, ct);
+        if (task is null) return false;
+
+        task.Status = status;
+        await _db.SaveChangesAsync(ct);
+        return true;
+    }
 }

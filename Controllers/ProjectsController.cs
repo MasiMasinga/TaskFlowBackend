@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using TaskFlow.DTOs.Projects;
 using TaskFlow.Interfaces;
 using TaskFlow.Mappings;
+using TaskFlow.Enum;
 
 namespace TaskFlow.Controllers;
 
@@ -16,7 +17,7 @@ public class ProjectsController : ControllerBase
         _projects = projects;
     }
 
-     [HttpGet]
+    [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ProjectResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ProjectResponse>>> GetAll(CancellationToken ct)
     {
@@ -61,9 +62,32 @@ public class ProjectsController : ControllerBase
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Delete(
+        Guid id,
+        CancellationToken ct,
+        [FromQuery(Name = "force")] bool force = false)
     {
-        var found = await _projects.DeleteAsync(id, ct);
-        return found ? NoContent() : NotFound();
+        var result = await _projects.DeleteAsync(id, ct, force);
+        
+        return result switch
+        {
+            ProjectDeleteResult.Deleted => NoContent(),
+            ProjectDeleteResult.NotFound => NotFound(),
+            ProjectDeleteResult.HasTasks => Problem(
+                title: "Cannot delete project",
+                detail: "This project has one or more tasks. Retry the request with force=true to delete the project and all associated tasks.",
+                statusCode: StatusCodes.Status409Conflict),
+            _ => throw new ArgumentOutOfRangeException(nameof(result), result, null)
+        };
+    }
+
+    [HttpGet("/api/projects/{id:guid}/exists")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Exists(Guid id, CancellationToken ct)
+    {
+        var project = await _projects.ExistsAsync(id, ct);
+        return project ? NoContent() : NotFound();
     }
 }

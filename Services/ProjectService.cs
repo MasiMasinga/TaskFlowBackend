@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using TaskFlow.Data;
 using TaskFlow.Interfaces;
 using TaskFlow.Models;
+using TaskFlow.Enum;
 
 namespace TaskFlow.Services;
 
@@ -61,14 +62,24 @@ public class ProjectService : IProjectService
         return project;
     }
 
-    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct)
+    public async Task<ProjectDeleteResult> DeleteAsync(Guid id, CancellationToken ct, bool force)
     {
-        var project = await _db.Projects.FindAsync(id, ct);
+        if (!force)
+        {
+            var hasTasks = await _db.Tasks.AnyAsync(t => t.ProjectId == id, ct);
+            if (hasTasks) return ProjectDeleteResult.HasTasks;
+        }
 
-        if (project is null) return false;
+        var project = await _db.Projects.FindAsync(id, ct);
+        if (project is null) return ProjectDeleteResult.NotFound;
 
         _db.Projects.Remove(project);
         await _db.SaveChangesAsync(ct);
-        return true;
+        return ProjectDeleteResult.Deleted;
+    }
+
+    public async Task<bool> ExistsAsync(Guid id, CancellationToken ct)
+    {
+        return await _db.Projects.AnyAsync(p => p.Id == id, ct);
     }
 }

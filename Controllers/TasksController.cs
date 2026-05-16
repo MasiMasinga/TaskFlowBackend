@@ -85,4 +85,14 @@ public class TasksController : ControllerBase
         var found = await _tasks.DeleteAsync(id, ct);
         return found ? NoContent() : NotFound();
     }
+
+    [HttpPatch("{id:guid}/status")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] UpdateTaskStatusRequest request, CancellationToken ct)
+    {
+        var found = await _tasks.UpdateStatusAsync(id, request.Status, ct);
+        return found ? NoContent() : NotFound();
+    }
 }
