@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using TaskFlow.DTOs.Projects;
 using TaskFlow.Enum;
@@ -7,21 +8,25 @@ using TaskFlow.Mappings;
 namespace TaskFlow.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/[controller]")]
 public class ProjectsController : ControllerBase
 {
     private readonly IProjectService _projects;
+    private readonly ICurrentUser _currentUser;
 
-    public ProjectsController(IProjectService projects)
+    public ProjectsController(IProjectService projects, ICurrentUser currentUser)
     {
         _projects = projects;
+        _currentUser = currentUser;
     }
+    private Guid UserId => _currentUser.UserId ?? throw new InvalidOperationException("Authenticated user has no ID claim.");
 
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ProjectResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ProjectResponse>>> GetAll(CancellationToken ct)
     {
-        var projects = await _projects.GetAllAsync(ct);
+        var projects = await _projects.GetAllAsync(UserId, ct);
         return Ok(projects.Select(p => p.ToResponse()).ToList());
     }
 
@@ -30,7 +35,7 @@ public class ProjectsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ProjectDetailResponse>> GetById(Guid id, CancellationToken ct)
     {
-        var project = await _projects.GetByIdAsync(id, ct);
+        var project = await _projects.GetByIdAsync(id, UserId, ct);
         return project is null ? NotFound() : Ok(project.ToDetailResponse());
     }
 
@@ -41,7 +46,7 @@ public class ProjectsController : ControllerBase
         [FromBody] CreateProjectRequest request,
         CancellationToken ct)
     {
-        var project = await _projects.CreateAsync(request.Name, request.Description, ct);
+        var project = await _projects.CreateAsync(UserId, request.Name, request.Description, ct);
         var response = project.ToResponse();
         return CreatedAtAction(nameof(GetById), new { id = project.Id }, response);
     }
@@ -55,7 +60,7 @@ public class ProjectsController : ControllerBase
         [FromBody] UpdateProjectRequest request,
         CancellationToken ct)
     {
-        var project = await _projects.UpdateAsync(id, request.Name, request.Description, ct);
+        var project = await _projects.UpdateAsync(id, UserId, request.Name, request.Description, ct);
         return project is null ? NotFound() : NoContent();
     }
 
@@ -68,7 +73,7 @@ public class ProjectsController : ControllerBase
         CancellationToken ct,
         [FromQuery(Name = "force")] bool force = false)
     {
-        var result = await _projects.DeleteAsync(id, ct, force);
+        var result = await _projects.DeleteAsync(id, UserId, ct, force);
 
         return result switch
         {
@@ -87,7 +92,7 @@ public class ProjectsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Exists(Guid id, CancellationToken ct)
     {
-        var project = await _projects.ExistsAsync(id, ct);
+        var project = await _projects.ExistsAsync(id, UserId, ct);
         return project ? NoContent() : NotFound();
     }
 }

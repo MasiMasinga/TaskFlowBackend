@@ -14,6 +14,9 @@ public static class DependencyInjection
         services.AddSingleton<IVersionService, VersionService>();
         services.AddScoped<IProjectService, ProjectService>();
         services.AddScoped<ITaskService, TaskService>();
+        services.AddSingleton<ITokenService, TokenService>();
+        services.AddHttpContextAccessor();
+        services.AddScoped<ICurrentUser, CurrentUser>();
         return services;
     }
 }

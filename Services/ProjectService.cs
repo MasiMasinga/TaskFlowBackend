@@ -1,8 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using TaskFlow.Data;
+using TaskFlow.Enum;
 using TaskFlow.Interfaces;
 using TaskFlow.Models;
-using TaskFlow.Enum;
 
 namespace TaskFlow.Services;
 
@@ -17,27 +17,29 @@ public class ProjectService : IProjectService
         _clockService = clockService;
     }
 
-    public async Task<List<Project>> GetAllAsync(CancellationToken ct)
+    public async Task<List<Project>> GetAllAsync(Guid userId, CancellationToken ct)
     {
         return await _db.Projects
             .AsNoTracking()
+            .Where(p => p.OwnerId == userId)
             .OrderByDescending(p => p.CreatedAtUtc)
             .ToListAsync(ct);
     }
 
-    public async Task<Project?> GetByIdAsync(Guid id, CancellationToken ct)
+    public async Task<Project?> GetByIdAsync(Guid id, Guid userId, CancellationToken ct)
     {
         return await _db.Projects
             .AsNoTracking()
             .Include(p => p.Tasks)
-            .FirstOrDefaultAsync(p => p.Id == id, ct);
+            .FirstOrDefaultAsync(p => p.Id == id && p.OwnerId == userId, ct);
     }
 
-    public async Task<Project> CreateAsync(string name, string? description, CancellationToken ct)
+    public async Task<Project> CreateAsync(Guid userId, string name, string? description, CancellationToken ct)
     {
         var project = new Project
         {
             Id = Guid.NewGuid(),
+            OwnerId = userId,
             Name = name,
             Description = description,
             CreatedAtUtc = _clockService.GetClock().UtcNow
@@ -48,9 +50,10 @@ public class ProjectService : IProjectService
         return project;
     }
 
-    public async Task<Project> UpdateAsync(Guid id, string name, string? description, CancellationToken ct)
+    public async Task<Project> UpdateAsync(Guid id, Guid userId, string name, string? description, CancellationToken ct)
     {
-        var project = await _db.Projects.FindAsync(id, ct);
+        var project = await _db.Projects
+            .FirstOrDefaultAsync(p => p.Id == id && p.OwnerId == userId, ct);
 
         if (project is null)
             throw new InvalidOperationException("Project not found");
@@ -62,15 +65,15 @@ public class ProjectService : IProjectService
         return project;
     }
 
-    public async Task<ProjectDeleteResult> DeleteAsync(Guid id, CancellationToken ct, bool force)
+    public async Task<ProjectDeleteResult> DeleteAsync(Guid id, Guid userId, CancellationToken ct, bool force)
     {
         if (!force)
         {
-            var hasTasks = await _db.Tasks.AnyAsync(t => t.ProjectId == id, ct);
+            var hasTasks = await _db.Tasks.AnyAsync(t => t.ProjectId == id && t.Project.OwnerId == userId, ct);
             if (hasTasks) return ProjectDeleteResult.HasTasks;
         }
 
-        var project = await _db.Projects.FindAsync(id, ct);
+        var project = await _db.Projects.FirstOrDefaultAsync(p => p.Id == id && p.OwnerId == userId, ct);
         if (project is null) return ProjectDeleteResult.NotFound;
 
         _db.Projects.Remove(project);
@@ -78,8 +81,8 @@ public class ProjectService : IProjectService
         return ProjectDeleteResult.Deleted;
     }
 
-    public async Task<bool> ExistsAsync(Guid id, CancellationToken ct)
+    public async Task<bool> ExistsAsync(Guid id, Guid userId, CancellationToken ct)
     {
-        return await _db.Projects.AnyAsync(p => p.Id == id, ct);
+        return await _db.Projects.AnyAsync(p => p.Id == id && p.OwnerId == userId, ct);
     }
 }
