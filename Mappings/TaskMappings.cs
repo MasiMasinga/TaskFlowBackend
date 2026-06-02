@@ -1,5 +1,6 @@
 using TaskFlow.DTOs.Tasks;
 using TaskFlow.Models;
+using TaskFlow.Models.Pagination;
 
 namespace TaskFlow.Mappings;
 
@@ -16,6 +17,15 @@ public static class TaskMappings
             DueDateUtc: task.DueDateUtc,
             CreatedAtUtc: task.CreatedAtUtc
         );
+    }
+
+    public static PagedResult<TaskResponse> ToResponse(this PagedResult<TaskItem> page)
+    {
+        return new PagedResult<TaskResponse>(
+            Items: page.Items.Select(t => t.ToResponse()).ToList(),
+            Page: page.Page,
+            PageSize: page.PageSize,
+            TotalCount: page.TotalCount);
     }
 
     public static TaskSummaryResponse ToSummaryResponse(this TaskItem task)

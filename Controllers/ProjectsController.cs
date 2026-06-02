@@ -23,9 +23,9 @@ public class ProjectsController : ControllerBase
 
     [HttpGet]
     [ProducesResponseType(typeof(IReadOnlyList<ProjectResponse>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<ProjectResponse>>> GetAll(CancellationToken ct)
+    public async Task<ActionResult<IReadOnlyList<ProjectResponse>>> GetAll([FromQuery] ProjectListRequest request, CancellationToken ct)
     {
-        var projects = await _projects.GetAllAsync(UserId, ct);
+        var projects = await _projects.GetAllAsync(UserId, request, ct);
         return Ok(projects);
     }
 

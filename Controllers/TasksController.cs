@@ -23,13 +23,12 @@ public class TasksController : ControllerBase
 
     [HttpGet("/projects/{projectId:guid}/tasks")]
     [ProducesResponseType(typeof(IReadOnlyList<TaskResponse>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<TaskResponse>>> GetAllForProject(
-        Guid projectId,
-        CancellationToken ct)
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<TaskResponse>>> GetAllForProject(Guid projectId, [FromQuery] TaskListRequest request, CancellationToken ct)
     {
-        var tasks = await _tasks.GetAllForProjectAsync(projectId, UserId, ct);
-        var response = tasks.Select(t => t.ToResponse()).ToList();
-        return Ok(response);
+        var page = await _tasks.GetForProjectAsync(projectId, UserId, request, ct);
+        return page is null ? NotFound() : Ok(page.ToResponse());
     }
 
     [HttpGet("/tasks/{id:guid}", Name = nameof(GetTaskById))]
@@ -45,10 +44,7 @@ public class TasksController : ControllerBase
     [ProducesResponseType(typeof(TaskResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<TaskResponse>> Create(
-        Guid projectId,
-        [FromBody] CreateTaskRequest request,
-        CancellationToken ct)
+    public async Task<ActionResult<TaskResponse>> Create(Guid projectId, [FromBody] CreateTaskRequest request, CancellationToken ct)
     {
         var task = await _tasks.CreateAsync(
             projectId, UserId, request.Title, request.Description, request.DueDateUtc, ct);
@@ -71,10 +67,7 @@ public class TasksController : ControllerBase
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Update(
-        Guid id,
-        [FromBody] UpdateTaskRequest request,
-        CancellationToken ct)
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateTaskRequest request, CancellationToken ct)
     {
         var found = await _tasks.UpdateAsync(
             id, UserId, request.Title, request.Description, request.Status, request.DueDateUtc, ct);

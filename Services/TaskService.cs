@@ -4,6 +4,8 @@ using TaskFlow.Enum;
 using TaskFlow.Interfaces;
 using TaskFlow.Models;
 using TaskFlow.Services.Caching;
+using TaskFlow.DTOs.Tasks;
+using TaskFlow.Models.Pagination;
 
 namespace TaskFlow.Services;
 
@@ -22,9 +24,46 @@ public class TaskService : ITaskService
         _cache = cache;
     }
 
-    public async Task<List<TaskItem>> GetAllForProjectAsync(Guid projectId, Guid userId, CancellationToken ct)
+    public async Task<PagedResult<TaskItem>?> GetForProjectAsync(
+    Guid projectId,
+    Guid userId,
+    TaskListRequest request,
+    CancellationToken ct)
     {
+        var projectExists = await _db.Projects
+            .AnyAsync(p => p.Id == projectId && p.OwnerId == userId, ct);
 
+        if (!projectExists) return null;
+
+        var query = _db.Tasks
+            .AsNoTracking()
+            .Where(t => t.ProjectId == projectId);
+
+        if (request.Status.HasValue)
+            query = query.Where(t => t.Status == request.Status.Value);
+
+        if (request.DueBeforeUtc.HasValue)
+            query = query.Where(t => t.DueDateUtc != null && t.DueDateUtc < request.DueBeforeUtc.Value);
+
+        if (request.DueAfterUtc.HasValue)
+            query = query.Where(t => t.DueDateUtc != null && t.DueDateUtc > request.DueAfterUtc.Value);
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var pattern = $"%{request.Search.Trim()}%";
+            query = query.Where(t => EF.Functions.ILike(t.Title, pattern));
+        }
+
+        query = ApplySort(query, request.Sort);
+
+        return await query.ToPagedResultAsync(request.Page, request.PageSize, ct);
+    }
+
+    public async Task<List<TaskItem>> GetAllForProjectAsync(
+        Guid projectId,
+        Guid userId,
+        CancellationToken ct)
+    {
         var key = CacheKeys.TasksForProject(projectId, userId);
 
         var cached = await _cache.GetAsync<List<TaskItem>>(key, ct);
@@ -93,7 +132,7 @@ public class TaskService : ITaskService
 
         await _db.SaveChangesAsync(ct);
         await _cache.RemoveAsync(CacheKeys.TaskDetail(id, userId), ct);
-        await _cache.RemoveAsync(CacheKeys.TasksForProject(task.ProjectId, userId), ct);   
+        await _cache.RemoveAsync(CacheKeys.TasksForProject(task.ProjectId, userId), ct);
         return true;
     }
 
@@ -119,5 +158,27 @@ public class TaskService : ITaskService
         await _cache.RemoveAsync(CacheKeys.TaskDetail(id, userId), ct);
         await _cache.RemoveAsync(CacheKeys.TasksForProject(task.ProjectId, userId), ct);
         return true;
+    }
+
+    private static IQueryable<TaskItem> ApplySort(IQueryable<TaskItem> query, string? sort)
+    {
+        if (string.IsNullOrWhiteSpace(sort))
+            return query.OrderByDescending(t => t.CreatedAtUtc);
+
+        var descending = sort.StartsWith('-');
+        var field = descending ? sort[1..] : sort;
+
+        return (field.ToLowerInvariant(), descending) switch
+        {
+            ("title", false) => query.OrderBy(t => t.Title),
+            ("title", true) => query.OrderByDescending(t => t.Title),
+            ("status", false) => query.OrderBy(t => t.Status),
+            ("status", true) => query.OrderByDescending(t => t.Status),
+            ("duedate", false) => query.OrderBy(t => t.DueDateUtc),
+            ("duedate", true) => query.OrderByDescending(t => t.DueDateUtc),
+            ("createdat", false) => query.OrderBy(t => t.CreatedAtUtc),
+            ("createdat", true) => query.OrderByDescending(t => t.CreatedAtUtc),
+            _ => query.OrderByDescending(t => t.CreatedAtUtc)
+        };
     }
 }

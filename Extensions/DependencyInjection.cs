@@ -23,10 +23,9 @@ public static class DependencyInjection
         services.AddHttpContextAccessor();
         services.AddScoped<ICurrentUser, CurrentUser>();
         services.AddMemoryCache();
-        // services.AddSingleton<ICacheService, MemoryCacheService>();
+        services.AddSingleton<ICacheService, MemoryCacheService>();
         var redisConnection = configuration.GetConnectionString("Redis")
             ?? throw new InvalidOperationException("Connection string 'Redis' is not configured.");
-
         services.AddStackExchangeRedisCache(options =>
         {
             options.Configuration = redisConnection;

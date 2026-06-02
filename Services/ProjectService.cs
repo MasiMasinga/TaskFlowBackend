@@ -6,6 +6,7 @@ using TaskFlow.Interfaces;
 using TaskFlow.Mappings;
 using TaskFlow.Models;
 using TaskFlow.Services.Caching;
+using TaskFlow.Models.Pagination;
 
 namespace TaskFlow.Services;
 
@@ -24,9 +25,22 @@ public class ProjectService : IProjectService
         _cache = cache;
     }
 
-    // Mapping lives in this service (after load, before SetAsync), not in ICacheService or controllers.
-    // The cache stores the API contract (DTOs): hits skip EF and mapping, and we never serialize
-    // entity graphs or leak persistence shape across process boundaries.
+    public async Task<PagedResult<Project>> GetForUserAsync(Guid userId, ProjectListRequest request, CancellationToken ct)
+    {
+        var query = _db.Projects
+            .AsNoTracking()
+            .Where(p => p.OwnerId == userId);
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var pattern = $"%{request.Search.Trim()}%";
+            query = query.Where(p => EF.Functions.ILike(p.Name, pattern));
+        }
+
+        query = ApplySort(query, request.Sort);
+
+        return await query.ToPagedResultAsync(request.Page, request.PageSize, ct);
+    }
 
     public async Task<List<ProjectResponse>> GetAllAsync(Guid userId, CancellationToken ct)
     {
@@ -133,5 +147,23 @@ public class ProjectService : IProjectService
         await _cache.RemoveAsync(CacheKeys.ProjectsForUser(userId), ct);
         await _cache.RemoveAsync(CacheKeys.ProjectDetail(id, userId), ct);
         return true;
+    }
+
+    private static IQueryable<Project> ApplySort(IQueryable<Project> query, string? sort)
+    {
+        if (string.IsNullOrWhiteSpace(sort))
+            return query.OrderByDescending(p => p.CreatedAtUtc);
+
+        var descending = sort.StartsWith('-');
+        var field = descending ? sort[1..] : sort;
+
+        return (field.ToLowerInvariant(), descending) switch
+        {
+            ("name", false) => query.OrderBy(p => p.Name),
+            ("name", true) => query.OrderByDescending(p => p.Name),
+            ("createdat", false) => query.OrderBy(p => p.CreatedAtUtc),
+            ("createdat", true) => query.OrderByDescending(p => p.CreatedAtUtc),
+            _ => query.OrderByDescending(p => p.CreatedAtUtc)
+        };
     }
 }
