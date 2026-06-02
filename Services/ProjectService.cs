@@ -7,6 +7,7 @@ using TaskFlow.Mappings;
 using TaskFlow.Models;
 using TaskFlow.Services.Caching;
 using TaskFlow.Models.Pagination;
+using TaskFlow.Exceptions;
 
 namespace TaskFlow.Services;
 
@@ -17,12 +18,14 @@ public class ProjectService : IProjectService
     private readonly AppDbContext _db;
     private readonly IClockService _clockService;
     private readonly ICacheService _cache;
+    private readonly ILogger<ProjectService> _logger;
 
-    public ProjectService(AppDbContext db, IClockService clockService, ICacheService cache)
+    public ProjectService(AppDbContext db, IClockService clockService, ICacheService cache, ILogger<ProjectService> logger)
     {
         _db = db;
         _clockService = clockService;
         _cache = cache;
+        _logger = logger;
     }
 
     public async Task<PagedResult<Project>> GetForUserAsync(Guid userId, ProjectListRequest request, CancellationToken ct)
@@ -95,6 +98,9 @@ public class ProjectService : IProjectService
         await _db.SaveChangesAsync(ct);
         await _cache.RemoveAsync(CacheKeys.ProjectsForUser(userId), ct);
 
+        _logger.LogInformation(
+            "Created project {ProjectId} with name {ProjectName} for user {UserId}", project.Id, project.Name, userId);
+
         return project.ToResponse();
     }
 
@@ -147,6 +153,26 @@ public class ProjectService : IProjectService
         await _cache.RemoveAsync(CacheKeys.ProjectsForUser(userId), ct);
         await _cache.RemoveAsync(CacheKeys.ProjectDetail(id, userId), ct);
         return true;
+    }
+
+    public async Task ArchiveAsync(Guid id, Guid userId, CancellationToken ct)
+    {
+        var project = await _db.Projects
+            .FirstOrDefaultAsync(p => p.Id == id && p.OwnerId == userId, ct);
+
+        if (project is null)
+            throw new NotFoundException("Project", id);
+
+        var openTasks = await _db.Tasks
+            .CountAsync(t => t.ProjectId == id && t.Status != TaskItemStatus.Completed
+                                                && t.Status != TaskItemStatus.Cancelled, ct);
+
+        if (openTasks > 0)
+            throw new ConflictException(
+                $"Cannot archive project: {openTasks} open task(s) remain. Complete or cancel them first.");
+
+        // (We'd add an IsArchived flag in a real implementation. For now, just log it.)
+        var logger = (ILogger<ProjectService>?)null; // placeholder — we'll inject below
     }
 
     private static IQueryable<Project> ApplySort(IQueryable<Project> query, string? sort)

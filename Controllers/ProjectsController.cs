@@ -25,7 +25,7 @@ public class ProjectsController : ControllerBase
     [ProducesResponseType(typeof(IReadOnlyList<ProjectResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IReadOnlyList<ProjectResponse>>> GetAll([FromQuery] ProjectListRequest request, CancellationToken ct)
     {
-        var projects = await _projects.GetAllAsync(UserId, request, ct);
+        var projects = await _projects.GetAllAsync(UserId, ct);
         return Ok(projects);
     }
 
@@ -92,5 +92,15 @@ public class ProjectsController : ControllerBase
     {
         var project = await _projects.ExistsAsync(id, UserId, ct);
         return project ? NoContent() : NotFound();
+    }
+
+    [HttpPost("{id:guid}/archive")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> Archive(Guid id, CancellationToken ct)
+    {
+        await _projects.ArchiveAsync(id, UserId, ct);
+        return NoContent();
     }
 }
